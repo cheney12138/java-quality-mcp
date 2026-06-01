@@ -22,7 +22,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server that enforces
 ## Requirements
 
 - Node.js 18+
-- Java 11+
+- Java 8+
 
 ## Setup
 
@@ -48,7 +48,7 @@ If `java` is not on your `PATH`, specify the JDK location:
       "command": "npx",
       "args": ["@mcp/java-quality-mcp"],
       "env": {
-        "JAVA_HOME": "/path/to/jdk11"
+        "JAVA_HOME": "/path/to/jdk"
       }
     }
   }
@@ -73,7 +73,7 @@ Java is resolved in this order: `JAVA11_HOME` → `JAVA_HOME` → `java` in PATH
 
 ## Data storage
 
-Style samples are stored in `~/.@mcp/java-quality-mcp/flavor.db` (SQLite). Data persists across sessions and is local to each user.
+Style samples are stored in `~/.code-quality-mcp/flavor.db` (SQLite). Data persists across sessions and is local to each user.
 
 ## License
 
