@@ -66,14 +66,27 @@ Java is resolved in this order: `JAVA11_HOME` → `JAVA_HOME` → `java` in PATH
 | `flavor_add` | Record a good or bad code sample |
 | `flavor_list` | List recorded samples |
 | `flavor_delete` | Remove a sample by id |
+| `get_quality_report` | Generate a statistics report of accumulated validation data |
 
 ## Slash commands
 
-`/code-flavor-good` and `/code-flavor-bad` are available in Claude Code once the MCP is connected. Paste a code snippet and Claude will analyze it, generate a note and tags, and save it automatically.
+`/code-flavor-good` and `/code-flavor-bad` — paste a code snippet and Claude will analyze it, generate a note and tags, and save it automatically.
+
+`/quality-report` — generates a quality statistics report including:
+- Total validations and violations caught
+- Overall first-pass rate
+- Top 5 most frequently violated rules
+- Pass rate trend: recent 7 days vs previous 7 days
+- Total design hints triggered
 
 ## Data storage
 
-Style samples are stored in `~/.code-quality-mcp/flavor.db` (SQLite). Data persists across sessions and is local to each user.
+All data is stored in `~/.code-quality-mcp/flavor.db` (SQLite), persisting across sessions:
+
+| Table | Contents |
+|---|---|
+| `flavors` | Style samples recorded via `/code-flavor-good` and `/code-flavor-bad` |
+| `validations` | Auto-recorded results of every `validate_code` call (for quality reporting) |
 
 ## License
 
