@@ -5,6 +5,15 @@ import { join } from "path"
 import { tmpdir } from "os"
 import { promisify } from "util"
 import { fileURLToPath } from "url"
+import { createRequire } from "module"
+
+const _require = createRequire(import.meta.url)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const TSParser = _require("tree-sitter") as any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const JavaGrammar = _require("tree-sitter-java") as any
+const tsParser = new TSParser()
+tsParser.setLanguage(JavaGrammar)
 
 const execAsync = promisify(exec)
 
@@ -106,46 +115,34 @@ async function runPmd(file: string): Promise<Violation[]> {
   return violations
 }
 
-function extractMethods(code: string): Array<{ name: string; body: string }> {
-  const KEYWORDS = new Set(["if", "for", "while", "switch", "try", "catch", "else", "synchronized", "do"])
-  const results: Array<{ name: string; body: string }> = []
-  const re = /\b([a-zA-Z_]\w*)\s*\([^)]*\)\s*(?:throws\s+[\w\s,]+)?\s*\{/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(code)) !== null) {
-    const name = m[1]
-    if (KEYWORDS.has(name)) continue
-    const start = m.index + m[0].length - 1
-    let depth = 1, i = start + 1
-    while (i < code.length && depth > 0) {
-      if (code[i] === "{") depth++
-      else if (code[i] === "}") depth--
-      i++
-    }
-    results.push({ name, body: code.slice(start + 1, i - 1) })
-  }
-  return results
-}
-
 function analyzeStructure(code: string): DesignHint[] {
-  const hints: DesignHint[] = []
-  for (const { name, body } of extractMethods(code)) {
+  let tree = tsParser.parse(code)
+  if (tree.rootNode.hasError) {
+    tree = tsParser.parse(`class _Tmp {\n${code}\n}`)
+  }
 
-    // else-if chain >= 3 → 4+ 个分支
-    const elseIfCount = (body.match(/\belse\s+if\s*\(/g) ?? []).length
-    if (elseIfCount >= 3) {
+  const hints: DesignHint[] = []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const method of tree.rootNode.descendantsOfType("method_declaration") as any[]) {
+    const name: string = method.childForFieldName("name")?.text ?? "unknown"
+    const body = method.childForFieldName("body")
+    if (!body) continue
+
+    // 1. else-if chain
+    const maxChain = calcElseIfChain(method)
+    if (maxChain >= 4) {
       hints.push({
         method: name,
-        smell: `${name}() 有 ${elseIfCount + 1} 个 if-else 分支`,
+        smell: `${name}() 有 ${maxChain} 个 if-else 分支`,
         pattern: "Strategy / ChainOfResponsibility",
         reason: "多个同形状条件分支，后续新增规则需修改方法体，建议用策略模式或责任链解耦"
       })
     }
 
-    // 同一变量 instanceof >= 3 次
-    const instMatches = [...body.matchAll(/\b(\w+)\s+instanceof\s+\w+/g)]
-    const varCounts: Record<string, number> = {}
-    for (const im of instMatches) varCounts[im[1]] = (varCounts[im[1]] ?? 0) + 1
-    for (const [varName, count] of Object.entries(varCounts)) {
+    // 2. instanceof chain（跳过 lambda 内部）
+    const instCounts: Record<string, number> = {}
+    collectInstanceofs(method, instCounts)
+    for (const [varName, count] of Object.entries(instCounts)) {
       if (count >= 3) {
         hints.push({
           method: name,
@@ -156,14 +153,15 @@ function analyzeStructure(code: string): DesignHint[] {
       }
     }
 
-    // 顺序 if-return 校验步骤 >= 3 → 责任链
-    const lines = body.split("\n")
+    // 3. 顺序 if-return（只看方法体直接子语句，不进 lambda）
     let guardCount = 0
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim()
-      const next = (lines[i + 1] ?? "").trim()
-      if (/^if\s*\(.*\)\s*return\b/.test(line)) guardCount++
-      else if (/^if\s*\(/.test(line) && /^return\b/.test(next)) guardCount++
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const stmt of body.namedChildren as any[]) {
+      if (
+        stmt.type === "if_statement" &&
+        stmt.namedChildren.length === 2 &&   // [condition, consequence]，无 else
+        isSingleReturn(stmt.namedChildren[1])
+      ) guardCount++
     }
     if (guardCount >= 3) {
       hints.push({
@@ -175,4 +173,59 @@ function analyzeStructure(code: string): DesignHint[] {
     }
   }
   return hints
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function calcElseIfChain(method: any): number {
+  let max = 0
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const ifNode of method.descendantsOfType("if_statement") as any[]) {
+    // 跳过作为 else-if 的节点（父节点是 if_statement 且排在 else 后）
+    const parent = ifNode.parent
+    if (parent?.type === "if_statement") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const elseIdx = (parent.children as any[]).findIndex((c: any) => c.type === "else")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (elseIdx >= 0 && (parent.children as any[]).indexOf(ifNode) > elseIdx) continue
+    }
+    max = Math.max(max, chainLength(ifNode))
+  }
+  return max
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function chainLength(ifNode: any): number {
+  let count = 1
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const children = ifNode.children as any[]
+  for (let i = 0; i < children.length; i++) {
+    if (children[i].type === "else" && i + 1 < children.length && children[i + 1].type === "if_statement") {
+      count += chainLength(children[i + 1])
+      break
+    }
+  }
+  return count
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function collectInstanceofs(node: any, counts: Record<string, number>) {
+  if (node.type === "lambda_expression") return
+  if (node.type === "instanceof_expression") {
+    const varName: string = node.namedChildren[0]?.text ?? ""
+    if (varName) counts[varName] = (counts[varName] ?? 0) + 1
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const child of node.children as any[]) collectInstanceofs(child, counts)
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function isSingleReturn(node: any): boolean {
+  if (!node) return false
+  if (node.type === "return_statement") return true
+  if (node.type === "block") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stmts = node.namedChildren as any[]
+    return stmts.length === 1 && stmts[0].type === "return_statement"
+  }
+  return false
 }
