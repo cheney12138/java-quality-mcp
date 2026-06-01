@@ -1,0 +1,13 @@
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>tmp</groupId>
+  <artifactId>cs-deps</artifactId>
+  <version>1</version>
+  <dependencies>
+    <dependency>
+      <groupId>com.puppycrawl.tools</groupId>
+      <artifactId>checkstyle</artifactId>
+      <version>10.21.0</version>
+    </dependency>
+  </dependencies>
+</project>

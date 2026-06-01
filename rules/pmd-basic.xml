@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<ruleset name="pmd-basic"
+  xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+  <description>PMD quickstart 推荐规则集</description>
+
+  <rule ref="rulesets/java/quickstart.xml">
+    <!-- 与 Checkstyle TypeName 重复 -->
+    <exclude name="ClassNamingConventions"/>
+    <!-- 代码片段没有 package 属实正常 -->
+    <exclude name="NoPackage"/>
+  </rule>
+
+</ruleset>
