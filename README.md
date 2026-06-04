@@ -1,4 +1,4 @@
-# @mcp/java-quality-mcp
+# @stg0512/java-quality-mcp
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server that enforces Java code quality inside Claude Code. It runs Checkstyle + PMD on AI-generated code, detects design smell, and lets teams accumulate custom style samples that guide future generation.
 
@@ -33,7 +33,7 @@ Add to your `.mcp.json`:
   "mcpServers": {
     "code-quality": {
       "command": "npx",
-      "args": ["@mcp/java-quality-mcp"]
+      "args": ["@stg0512/java-quality-mcp"]
     }
   }
 }
@@ -46,7 +46,7 @@ If `java` is not on your `PATH`, specify the JDK location:
   "mcpServers": {
     "code-quality": {
       "command": "npx",
-      "args": ["@mcp/java-quality-mcp"],
+      "args": ["@stg0512/java-quality-mcp"],
       "env": {
         "JAVA_HOME": "/path/to/jdk"
       }
